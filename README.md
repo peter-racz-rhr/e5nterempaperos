@@ -17,7 +17,9 @@ Nyisd meg az oldalt (GitHub Pages), vagy töltsd le az `index.html`-t és nyisd 
 A beosztást a böngésző megjegyzi, de csak abban a böngészőben. Másnak átadni a
 **Beosztás mentése fájlba** / **Betöltés fájlból** gombokkal lehet.
 
-A `kartyak.pdf` az összes előadás kártyáját tartalmazza, laponként hármat.
+Az `ajtolapok.pdf` az összes terem ajtólapja egy fájlban, a `terembeosztas.json` alapján
+(sávok ideje és előadás-id → terem). A `kartyak.pdf` az összes előadás kártyáját
+tartalmazza, laponként hármat.
 
 ## Frissítés
 
@@ -35,4 +37,5 @@ node forras/epit.js --frissit
 
 - `forras/szerkeszto.html` – a szerkesztő forrása (ezt kell szerkeszteni, nem az `index.html`-t)
 - `forras/epit.js` – az adatok letöltése, az `index.html` és a `kartyak.pdf` összeállítása
+- `terembeosztas.json` – terembeosztás és a sávok ideje (kézzel karbantartva)
 - `eloadasok.json`, `savok.json`, `adatok-datuma.txt` – a letöltött adatok

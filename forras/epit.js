@@ -1,5 +1,6 @@
 // A szerkesztő összeállítása (index.html) és az összes kártya PDF-be mentése.
-//   node forras/epit.js            -> index.html + kartyak.pdf
+//   node forras/epit.js            -> index.html + kartyak.pdf + ajtolapok.pdf
+// A terembeosztás és a sávok ideje a terembeosztas.json-ban van (előadás-id -> terem).
 //   node forras/epit.js --frissit  -> előbb újra letölti az adatokat az oldalról
 const fs = require('fs');
 const path = require('path');
@@ -22,6 +23,10 @@ async function main() {
   const html = fs.readFileSync(path.join(__dirname, 'szerkeszto.html'), 'utf8')
     .replace('/*ELOADASOK*/[]', () => JSON.stringify(JSON.parse(eloadasok)))
     .replace('/*SAVOK*/[]', () => JSON.stringify(JSON.parse(savok)))
+    .replace('/*BEOSZTAS*/{ idopontok: {}, termek: {} }', () => {
+      const f = path.join(GYOKER, 'terembeosztas.json');
+      return fs.existsSync(f) ? JSON.stringify(JSON.parse(fs.readFileSync(f, 'utf8'))) : '{ "idopontok": {}, "termek": {} }';
+    })
     .replace('/*DATUM*/', () => fs.readFileSync(path.join(GYOKER, 'adatok-datuma.txt'), 'utf8').trim());
   const kimenet = path.join(GYOKER, 'index.html');
   fs.writeFileSync(kimenet, html);
@@ -32,11 +37,15 @@ async function main() {
   const hibak = [];
   oldal.on('pageerror', (e) => hibak.push(e.message));
   await oldal.goto('file://' + kimenet);
-  const db = await oldal.evaluate(() => window.nyomtatasEpit('kartyak'));
   await oldal.emulateMedia({ media: 'print' });
-  const pdf = path.join(GYOKER, 'kartyak.pdf');
-  await oldal.pdf({ path: pdf, format: 'A4', landscape: true, printBackground: true, preferCSSPageSize: true });
-  console.log(`Kész: ${pdf} (${db} oldal)`);
+  for (const [mit, fajl] of [['kartyak', 'kartyak.pdf'], ['mind', 'ajtolapok.pdf']]) {
+    const db = await oldal.evaluate((m) => window.nyomtatasEpit(m), mit);
+    const pdf = path.join(GYOKER, fajl);
+    await oldal.pdf({ path: pdf, format: 'A4', landscape: true, printBackground: true, preferCSSPageSize: true });
+    console.log(`Kész: ${pdf} (${db} oldal)`);
+  }
+  const utkozesek = await oldal.evaluate(() => window.UTKOZESEK);
+  if (utkozesek.length) console.warn('Ütközés, kimaradt:', utkozesek);
   if (hibak.length) console.error('Hibák az oldalon:', hibak);
   await bongeszo.close();
 }

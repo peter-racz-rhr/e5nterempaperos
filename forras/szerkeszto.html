@@ -170,8 +170,9 @@ input[type="text"], input[type="search"], textarea { border: 1px solid var(--lin
 <script>
 const ELOADASOK = /*ELOADASOK*/[];
 const SAVOK = /*SAVOK*/[];
+const BEOSZTAS = /*BEOSZTAS*/{ idopontok: {}, termek: {} };
 const ESEMENY = 'E5N – Eötvös Napok';
-const TAROLO = 'e5n-ajtolapok-v1';
+const TAROLO = 'e5n-ajtolapok-v2';
 
 const byId = new Map(ELOADASOK.map((p) => [p.id, p]));
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -183,17 +184,37 @@ const tisztaLeiras = (s) => String(s ?? '').replace(/https?:\/\/\S+/g, '').repla
 const ujId = () => Math.random().toString(36).slice(2, 9);
 
 // ---- Állapot ----
+// Kiinduló beosztás: a terembeosztas.json (ha van), különben az oldalon megadott
+// helyszín. Ha egy teremben egy sávra két előadás jut, egyik sem kerül be, és
+// az ütközés kiíródik.
+const UTKOZESEK = [];
 function alapAllapot() {
   const termek = new Map();
+  const jeloltek = new Map();
   for (const p of ELOADASOK) {
-    if (elmarad(p) || !ervenyesTerem(p.address)) continue;
-    const nev = p.address.trim();
-    if (!termek.has(nev)) termek.set(nev, { id: ujId(), nev, savok: {} });
-    termek.get(nev).savok[p.slot_id] = p.id;
+    const nev = (BEOSZTAS.termek[p.id] ?? p.address ?? '').trim();
+    if (elmarad(p) || !ervenyesTerem(nev)) continue;
+    const kulcs = nev + '|' + p.slot_id;
+    jeloltek.set(kulcs, [...(jeloltek.get(kulcs) || []), p.id]);
   }
-  const lista = [...termek.values()];
+  UTKOZESEK.length = 0;
+  for (const [kulcs, idk] of jeloltek) {
+    const [nev, sav] = kulcs.split('|');
+    if (!termek.has(nev)) termek.set(nev, { id: ujId(), nev, savok: {} });
+    if (idk.length > 1) UTKOZESEK.push(`${nev}, ${sav}. sáv: #${idk.join(', #')}`);
+    else termek.get(nev).savok[sav] = idk[0];
+  }
+  const lista = [...termek.values()].sort((a, b) => teremSorrend(a.nev, b.nev));
   if (!lista.length) lista.push({ id: ujId(), nev: '', savok: {} });
-  return { termek: lista, aktiv: lista[0].id, idok: {}, szovegek: {}, sav: SAVOK[0]?.id ?? 1 };
+  return { termek: lista, aktiv: lista[0].id, idok: { ...BEOSZTAS.idopontok }, szovegek: {}, sav: SAVOK[0]?.id ?? 1 };
+}
+// Számozott termek számsorrendben elöl, utána a névvel jelöltek ábécérendben.
+function teremSorrend(a, b) {
+  const na = parseInt(a, 10), nb = parseInt(b, 10);
+  if (!isNaN(na) && !isNaN(nb)) return na - nb;
+  if (!isNaN(na)) return -1;
+  if (!isNaN(nb)) return 1;
+  return a.localeCompare(b, 'hu');
 }
 let A;
 try { A = JSON.parse(localStorage.getItem(TAROLO)) || alapAllapot(); } catch { A = alapAllapot(); }
@@ -391,13 +412,14 @@ function nyomtatasEpit(mit) {
       }
     }
   } else {
-    const termek = mit === 'mind' ? A.termek.filter((t) => Object.keys(t.savok).length) : [aktivTerem()];
+    const termek = mit === 'mind' ? A.termek.filter((t) => Object.keys(t.savok).length).sort((a, b) => teremSorrend(a.nev, b.nev)) : [aktivTerem()];
     for (const t of termek) gyoker.append(lapElem(t));
   }
   gyoker.querySelectorAll('.lap').forEach(illeszt);
   return gyoker.children.length;
 }
 window.nyomtatasEpit = nyomtatasEpit;
+window.UTKOZESEK = UTKOZESEK;
 function nyomtat(mit) {
   if (mit === 'mind') {
     const nevtelen = A.termek.filter((t) => Object.keys(t.savok).length && !t.nev.trim()).length;
@@ -514,6 +536,7 @@ window.addEventListener('afterprint', () => $('nyomtatas').replaceChildren());
 
 rajzolIdok();
 rajzol();
+if (UTKOZESEK.length) uzen('Ütközés a beosztásban, ezek kimaradtak: ' + UTKOZESEK.join('; '));
 </script>
 </body>
 </html>
