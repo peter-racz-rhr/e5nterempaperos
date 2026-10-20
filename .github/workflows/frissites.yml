@@ -1,0 +1,33 @@
+name: Adatok frissítése
+
+# Naponta letölti az előadásokat az e5vosdo.hu-ról, és ha változott valami,
+# újraépíti az index.html-t és a kartyak.pdf-et.
+on:
+  schedule:
+    - cron: '17 5 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  frissites:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-save playwright@1.56.1 && npx playwright install --with-deps chromium
+      - run: node forras/epit.js --frissit
+      - name: Változások mentése
+        run: |
+          if git diff --quiet -- eloadasok.json savok.json; then
+            echo "Nincs új adat."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898299+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Adatok frissítése az e5vosdo.hu-ról"
+          git push

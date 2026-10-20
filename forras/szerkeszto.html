@@ -1,0 +1,519 @@
+<!doctype html>
+<html lang="hu">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>E5N ajtólap-szerkesztő</title>
+<style>
+/* Elrendezés: bal oldalt a kártyatár sávonként, jobbra a munkaterület a termek
+   listájával és a kiválasztott fekvő A4-es lap élő előnézetével. */
+:root {
+  --bg: #f3f4f1; --panel: #ffffff; --fg: #1d201c; --muted: #5f655c; --line: #d6d9d2;
+  --accent: #1f5f8b; --accent-soft: #e3eef6; --warn: #b3261e; --ok: #2e6b3a; --chip: #eceee9;
+  --ui: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --paper-font: "Liberation Sans", Arial, Helvetica, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --bg: #171a18; --panel: #212522; --fg: #e8ebe6; --muted: #a1a89d; --line: #3a403b;
+    --accent: #7db7e0; --accent-soft: #233544; --warn: #f2958c; --ok: #8fd19e; --chip: #2c312d; color-scheme: dark; }
+}
+:root[data-theme="dark"] { --bg: #171a18; --panel: #212522; --fg: #e8ebe6; --muted: #a1a89d; --line: #3a403b;
+  --accent: #7db7e0; --accent-soft: #233544; --warn: #f2958c; --ok: #8fd19e; --chip: #2c312d; color-scheme: dark; }
+
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body { background: var(--bg); color: var(--fg); font: 14px/1.4 var(--ui); }
+button, input, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; border: 1px solid var(--line); background: var(--panel); border-radius: 6px; padding: 6px 10px; }
+button:hover { border-color: var(--accent); }
+button:focus-visible, input:focus-visible, textarea:focus-visible, .kartya:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button.fo { background: var(--accent); border-color: var(--accent); color: var(--panel); font-weight: 600; }
+button.veszely { color: var(--warn); }
+input[type="text"], input[type="search"], textarea { border: 1px solid var(--line); background: var(--panel); border-radius: 6px; padding: 6px 8px; }
+
+.app { display: grid; grid-template-columns: 360px 1fr; height: 100%; }
+@media (max-width: 900px) { .app { grid-template-columns: 1fr; height: auto; } }
+
+/* Kártyatár */
+.tar { border-right: 1px solid var(--line); background: var(--panel); display: flex; flex-direction: column; min-height: 0; }
+.tar-fej { padding: 14px 16px 10px; display: grid; gap: 10px; border-bottom: 1px solid var(--line); }
+.tar-fej h1 { font-size: 16px; margin: 0; display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.adatdatum { font-size: 12px; font-weight: 400; color: var(--muted); }
+.savfulek { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; }
+.savfulek button { padding: 8px 4px; font-weight: 600; }
+.savfulek button[aria-pressed="true"] { background: var(--accent); color: var(--panel); border-color: var(--accent); }
+.savfulek small { display: block; font-weight: 400; opacity: .85; font-size: 11px; }
+.szuro { display: flex; gap: 12px; flex-wrap: wrap; color: var(--muted); font-size: 12.5px; }
+.szuro label { display: flex; gap: 5px; align-items: center; cursor: pointer; }
+.lista { overflow-y: auto; padding: 10px 12px 24px; display: grid; gap: 8px; align-content: start; min-height: 0; }
+.kartya { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; background: var(--panel); cursor: grab; display: grid; gap: 4px; }
+.kartya:hover { border-color: var(--accent); }
+.kartya .k-cim { font-weight: 650; line-height: 1.25; }
+.kartya .k-eloado { color: var(--muted); font-size: 12.5px; }
+.kartya .k-leiras { font-size: 12.5px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.kartya .k-sor { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; font-size: 11.5px; }
+.cimke { background: var(--chip); border-radius: 4px; padding: 1px 6px; }
+.cimke.dupla { background: var(--fg); color: var(--panel); }
+.kartya.hasznalt { opacity: .55; cursor: default; background: var(--bg); }
+.kartya.hasznalt .hely { color: var(--ok); font-weight: 600; }
+.kartya.elmarad { opacity: .45; cursor: not-allowed; }
+.kartya.elmarad .k-cim { text-decoration: line-through; }
+.ures-lista { color: var(--muted); padding: 20px 8px; text-align: center; }
+
+/* Munkaterület */
+.munka { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.eszkozsor { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; padding: 12px 20px; border-bottom: 1px solid var(--line); background: var(--panel); }
+.eszkozsor .csoport { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.eszkozsor .cimsz { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; margin-right: 4px; }
+.ido-mezo { width: 112px; font-variant-numeric: tabular-nums; }
+.termek { display: flex; flex-wrap: wrap; gap: 6px; padding: 12px 20px 0; }
+.termek button { border-radius: 999px; padding: 5px 12px; }
+.termek button[aria-current="true"] { background: var(--accent-soft); border-color: var(--accent); font-weight: 600; }
+.termek .db { color: var(--muted); font-size: 12px; margin-left: 4px; font-variant-numeric: tabular-nums; }
+.elonezet { flex: 1; overflow: auto; padding: 16px 20px 32px; min-height: 0; }
+.lapkeret { margin: 0 auto; box-shadow: 0 1px 2px rgba(0,0,0,.12), 0 8px 24px rgba(0,0,0,.10); }
+.lapkeret > .lap { transform-origin: top left; }
+.sugo { color: var(--muted); font-size: 12.5px; padding: 8px 20px 0; }
+.uzenet { position: fixed; right: 20px; bottom: 20px; background: var(--fg); color: var(--bg); padding: 10px 14px; border-radius: 8px; max-width: 360px; opacity: 0; transition: opacity .2s; pointer-events: none; }
+.uzenet.latszik { opacity: 1; }
+@media (prefers-reduced-motion: reduce) { .uzenet { transition: none; } }
+
+/* ===== A nyomtatott lap (mindig fehér papír, mm-ben méretezve) ===== */
+.lap { width: 297mm; height: 210mm; background: #fff; color: #1a1a1a; font-family: var(--paper-font);
+  padding: 12mm 14mm 10mm; display: flex; flex-direction: column; overflow: hidden; }
+.lap * { margin: 0; padding: 0; box-sizing: border-box; }
+.lap header { display: flex; justify-content: space-between; align-items: flex-end; gap: 8mm;
+  border-bottom: 1.2mm solid #1a1a1a; padding-bottom: 4mm; margin-bottom: 7mm; }
+.lap .terem { font-size: 46pt; font-weight: 700; letter-spacing: -0.5pt; line-height: 1; text-transform: uppercase; flex: 1; min-width: 0; }
+.lap input.terem { border: 0; background: transparent; color: inherit; font-family: inherit; outline: none; width: 100%; padding: 0; }
+.lap input.terem::placeholder { color: #c2c2c2; }
+.lap .esemeny { font-size: 14pt; color: #555; text-align: right; white-space: nowrap; }
+.lap main { flex: 1; display: grid; grid-template-columns: repeat(3, 1fr); gap: 7mm; min-height: 0; }
+.lap .oszlop { border: 0.5mm solid #1a1a1a; border-radius: 3mm; padding: 6mm; display: flex; flex-direction: column; overflow: hidden; min-height: 0; position: relative; }
+.lap .oszlop.ures { border-style: dashed; border-color: #aaa; color: #999; }
+.lap .sav { font-size: 13pt; font-weight: 700; letter-spacing: 1pt; text-transform: uppercase; color: #666; display: flex; justify-content: space-between; }
+.lap .sav.ido-nelkul { margin-bottom: 4mm; }
+.lap .azon { letter-spacing: 0; color: #999; font-weight: 400; }
+.lap .ido { font-size: 30pt; font-weight: 700; margin: 1mm 0 5mm; font-variant-numeric: tabular-nums; }
+.lap .ido.hianyzik { color: #c00; }
+.lap .tartalom { flex: 1; min-height: 0; overflow: hidden; }
+.lap .pcimke { display: inline-block; background: #1a1a1a; color: #fff; font-size: 9.5pt; font-weight: 700; padding: 1mm 2.5mm; border-radius: 1mm; margin-bottom: 3mm; }
+.lap h2 { font-size: 22pt; line-height: 1.15; margin-bottom: 6mm; }
+.lap .felirat { font-size: 9.5pt; font-weight: 700; letter-spacing: 1pt; text-transform: uppercase; color: #777; margin-bottom: 1mm; }
+.lap .eloado { font-size: 15pt; font-weight: 700; line-height: 1.25; margin-bottom: 6mm; }
+.lap .leiras { font-size: 14pt; line-height: 1.35; }
+.lap .megj { margin-top: 3mm; font-size: 10.5pt; font-weight: 700; }
+.lap .tovabb { color: #555; font-style: italic; white-space: nowrap; }
+.lap .nincs { flex: 1; display: flex; align-items: center; justify-content: center; text-align: center; font-size: 15pt; }
+.lap .oszlop.cel { background: #eef5fb; border-color: #1f5f8b; }
+.lap .oszlop.tiltott { background: #fbeeee; border-color: #b3261e; }
+.lap .kezelok { position: absolute; top: 4mm; right: 4mm; display: flex; gap: 2mm; }
+.lap .kezelok button { font: 9pt var(--ui); padding: 1mm 2.5mm; border: 1px solid #bbb; background: #fff; color: #333; border-radius: 1.5mm; }
+.lap .kezelok button:hover { border-color: #1f5f8b; }
+.lap textarea.szerk { width: 100%; height: 100%; font: 12pt/1.35 var(--paper-font); border: 1px solid #1f5f8b; border-radius: 1.5mm; padding: 2mm; color: #1a1a1a; background: #fff; resize: none; }
+.lap .szerk-gombok { display: flex; gap: 2mm; margin-top: 2mm; }
+.lap .szerk-gombok button { font: 9.5pt var(--ui); padding: 1mm 3mm; border: 1px solid #bbb; background: #fff; color: #333; border-radius: 1.5mm; }
+.lap.kartyalap header .terem { font-size: 30pt; }
+
+#nyomtatas { position: absolute; left: -100000px; top: 0; }
+@page { size: A4 landscape; margin: 0; }
+@media print {
+  html, body { height: auto; background: #fff; }
+  .app, .uzenet { display: none !important; }
+  #nyomtatas { position: static; }
+  #nyomtatas .lap { break-after: page; }
+  #nyomtatas .lap:last-child { break-after: auto; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="tar">
+    <div class="tar-fej">
+      <h1>Előadások <span class="adatdatum">adatok: /*DATUM*/</span></h1>
+      <div class="savfulek" id="savfulek"></div>
+      <input type="search" id="kereses" placeholder="Keresés címre vagy előadóra">
+      <div class="szuro">
+        <label><input type="checkbox" id="csakSzabad"> Csak a még be nem osztottak</label>
+        <label><input type="checkbox" id="elmaradtak"> Elmaradt előadások mutatása</label>
+      </div>
+    </div>
+    <div class="lista" id="lista"></div>
+  </aside>
+
+  <section class="munka">
+    <div class="eszkozsor">
+      <div class="csoport" id="idok"><span class="cimsz">Sávok ideje</span></div>
+      <div class="csoport">
+        <button id="ujTerem">+ Új terem</button>
+        <button id="teremTorles" class="veszely">Terem törlése</button>
+      </div>
+      <div class="csoport">
+        <button id="nyomtatEz" class="fo">Ez a lap nyomtatása</button>
+        <button id="nyomtatMind">Összes terem nyomtatása</button>
+        <button id="nyomtatKartyak">Összes kártya nyomtatása</button>
+      </div>
+      <div class="csoport">
+        <button id="mentes">Beosztás mentése fájlba</button>
+        <button id="betoltesGomb">Betöltés fájlból</button>
+        <input type="file" id="betoltes" accept="application/json" hidden>
+      </div>
+    </div>
+    <div class="termek" id="termek"></div>
+    <p class="sugo">Kattints egy kártyára a bal oldalon, és bekerül a kijelölt terem lapjára a saját sávjába. Húzni is lehet. Egy előadás csak egy teremben lehet; a dupla előadás mindkét része együtt mozog. A terem nevét a lap tetején írd be.</p>
+    <div class="elonezet" id="elonezet"></div>
+  </section>
+</div>
+<div id="nyomtatas"></div>
+<div class="uzenet" id="uzenet" role="status"></div>
+
+<script>
+const ELOADASOK = /*ELOADASOK*/[];
+const SAVOK = /*SAVOK*/[];
+const ESEMENY = 'E5N – Eötvös Napok';
+const TAROLO = 'e5n-ajtolapok-v1';
+
+const byId = new Map(ELOADASOK.map((p) => [p.id, p]));
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const elmarad = (p) => p.capacity === 0 || /ELMARAD/i.test(p.title);
+const ervenyesTerem = (t) => t && t.trim() !== '?' && t.trim().length <= 40;
+const tisztaCim = (p) => p.title.replace(/^\d\/\d\.\s*/, '');
+const tisztaLeiras = (s) => String(s ?? '').replace(/https?:\/\/\S+/g, '').replace(/:\s*(?=\n|$)/g, '.')
+  .replace(/\s*\n\s*/g, ' ').replace(/\s{2,}/g, ' ').trim();
+const ujId = () => Math.random().toString(36).slice(2, 9);
+
+// ---- Állapot ----
+function alapAllapot() {
+  const termek = new Map();
+  for (const p of ELOADASOK) {
+    if (elmarad(p) || !ervenyesTerem(p.address)) continue;
+    const nev = p.address.trim();
+    if (!termek.has(nev)) termek.set(nev, { id: ujId(), nev, savok: {} });
+    termek.get(nev).savok[p.slot_id] = p.id;
+  }
+  const lista = [...termek.values()];
+  if (!lista.length) lista.push({ id: ujId(), nev: '', savok: {} });
+  return { termek: lista, aktiv: lista[0].id, idok: {}, szovegek: {}, sav: SAVOK[0]?.id ?? 1 };
+}
+let A;
+try { A = JSON.parse(localStorage.getItem(TAROLO)) || alapAllapot(); } catch { A = alapAllapot(); }
+function ment() { try { localStorage.setItem(TAROLO, JSON.stringify(A)); } catch {} }
+
+const aktivTerem = () => A.termek.find((t) => t.id === A.aktiv) || A.termek[0];
+function holVan(pid) {
+  for (const t of A.termek) for (const [s, id] of Object.entries(t.savok)) if (id === pid) return { terem: t, sav: +s };
+  return null;
+}
+const par = (p) => p.linked_presentation_id ? byId.get(p.linked_presentation_id) : null;
+
+function kivesz(pid, parral = true) {
+  const h = holVan(pid);
+  if (h) delete h.terem.savok[h.sav];
+  const pr = parral && par(byId.get(pid));
+  if (pr) kivesz(pr.id, false);
+}
+function behelyez(pid, terem) {
+  const p = byId.get(pid);
+  if (!p || elmarad(p)) return;
+  const csere = [];
+  for (const q of [p, par(p)].filter(Boolean)) {
+    const foglal = terem.savok[q.slot_id];
+    if (foglal && foglal !== q.id && !csere.includes(foglal)) csere.push(foglal);
+  }
+  for (const id of csere) kivesz(id);
+  kivesz(p.id);
+  terem.savok[p.slot_id] = p.id;
+  const pr = par(p);
+  if (pr) terem.savok[pr.slot_id] = pr.id;
+  ment(); rajzol();
+  const nev = terem.nev || 'névtelen terem';
+  uzen(pr ? `Bekerült: ${nev}, ${p.slot_id}. és ${pr.slot_id}. sáv (dupla előadás)` : `Bekerült: ${nev}, ${p.slot_id}. sáv`
+    + (csere.length ? ' – a korábbi előadás visszakerült a listába' : ''));
+}
+
+// ---- Lap rajzolása ----
+function oszlopHTML(sav, p, opc) {
+  const ido = A.idok[sav.id];
+  const fej = `<div class="sav${opc.idoNelkul ? ' ido-nelkul' : ''}"><span>${esc(sav.title)}</span>${opc.azon && p ? `<span class="azon">#${p.id}</span>` : ''}</div>`
+    + (opc.idoNelkul ? '' : `<div class="ido${ido ? '' : ' hianyzik'}">${ido ? esc(ido) : '__:__ – __:__'}</div>`);
+  if (!p) return `<section class="oszlop ures" data-sav="${sav.id}">${fej}<div class="nincs">${opc.interaktiv ? 'Ide húzz vagy kattints<br>egy ' + sav.id + '. sávos kártyára' : 'Ebben a sávban<br>nincs előadás'}</div></section>`;
+  const pr = par(p);
+  const dupla = pr ? `<div class="pcimke">Dupla előadás · ${p.slot_id < pr.slot_id ? 'folytatás' : 'kezdés'}: ${pr.slot_id}. sáv</div>` : '';
+  const ajanlott = p.requirements && /évfolyam/.test(p.requirements) ? `<div class="megj">${esc(p.requirements.replace(/[()]/g, ''))}</div>` : '';
+  const kez = opc.interaktiv ? `<div class="kezelok"><button data-szerk="${p.id}">Szöveg</button><button data-kivesz="${p.id}" title="Kivétel a lapról">Kivesz</button></div>` : '';
+  return `<section class="oszlop" data-sav="${sav.id}">${kez}${fej}
+    <div class="tartalom">${dupla}
+      <h2>${esc(tisztaCim(p))}</h2>
+      <div class="felirat">Előadó</div><div class="eloado">${esc(p.performer)}</div>
+      <div class="felirat">Az előadásról</div><p class="leiras" data-pid="${p.id}">${esc(A.szovegek[p.id] ?? tisztaLeiras(p.description))}</p>
+      ${ajanlott}</div></section>`;
+}
+
+function lapElem(terem, opc = {}) {
+  const el = document.createElement('div');
+  el.className = 'lap';
+  const cim = opc.interaktiv
+    ? `<input class="terem" id="teremNev" type="text" placeholder="Terem neve" value="${esc(terem.nev)}" aria-label="Terem neve">`
+    : `<div class="terem">${esc(terem.nev || '________')}</div>`;
+  el.innerHTML = `<header>${cim}<div class="esemeny">${esc(ESEMENY)}</div></header>
+    <main>${SAVOK.map((s) => oszlopHTML(s, byId.get(terem.savok[s.id]), opc)).join('')}</main>`;
+  return el;
+}
+
+// Ha egy oszlop nem fér ki: előbb kisebb betű egy olvasható határig, utána a
+// leírás mondathatáron levágva, az oldalra utalással.
+const MIN_SKALA = 0.72;
+function illeszt(lap) {
+  const tul = (t) => t.scrollHeight > t.clientHeight + 1;
+  for (const t of lap.querySelectorAll('.tartalom')) {
+    let skala = 1;
+    while (tul(t) && skala > MIN_SKALA) {
+      skala = Math.max(MIN_SKALA, skala - 0.04);
+      for (const el of t.children) el.style.zoom = skala;
+    }
+    const leiras = t.querySelector('.leiras');
+    if (!leiras || !tul(t)) continue;
+    const teljes = leiras.textContent;
+    const mondatok = teljes.match(/[^.!?…]+[.!?…]+["'”)]*\s*|[^.!?…]+$/g) || [teljes];
+    const tovabb = '<span class="tovabb">… A teljes leírás: e5vosdo.hu/jelentkezes</span>';
+    const beir = (szoveg) => { leiras.textContent = szoveg.trim() + ' '; leiras.insertAdjacentHTML('beforeend', tovabb); };
+    let n = mondatok.length;
+    do beir(mondatok.slice(0, Math.max(--n, 0)).join('')); while (n > 0 && tul(t));
+    if (tul(t)) {
+      const szavak = mondatok[0].split(' ');
+      let k = szavak.length;
+      do beir(szavak.slice(0, --k).join(' ')); while (k > 0 && tul(t));
+    }
+    const oszlop = t.closest('.oszlop');
+    if (oszlop) oszlop.dataset.levagva = '1';
+  }
+}
+
+// ---- Felület ----
+const $ = (id) => document.getElementById(id);
+let huzott = null;
+
+function rajzolFulek() {
+  $('savfulek').innerHTML = SAVOK.map((s) => {
+    const osszes = ELOADASOK.filter((p) => p.slot_id === s.id && !elmarad(p));
+    const szabad = osszes.filter((p) => !holVan(p.id)).length;
+    return `<button data-sav="${s.id}" aria-pressed="${A.sav === s.id}">${esc(s.title)}<small>${szabad} / ${osszes.length} szabad</small></button>`;
+  }).join('');
+}
+
+function rajzolLista() {
+  const q = $('kereses').value.trim().toLowerCase();
+  const csakSzabad = $('csakSzabad').checked, elm = $('elmaradtak').checked;
+  const lista = ELOADASOK.filter((p) => p.slot_id === A.sav)
+    .filter((p) => elm || !elmarad(p))
+    .filter((p) => !csakSzabad || !holVan(p.id))
+    .filter((p) => !q || (p.title + ' ' + p.performer).toLowerCase().includes(q))
+    .sort((a, b) => elmarad(a) - elmarad(b) || !!holVan(a.id) - !!holVan(b.id) || a.id - b.id);
+  $('lista').innerHTML = lista.length ? lista.map((p) => {
+    const h = holVan(p.id), e = elmarad(p), pr = par(p);
+    const leiras = tisztaLeiras(p.description);
+    return `<div class="kartya${h ? ' hasznalt' : ''}${e ? ' elmarad' : ''}" data-pid="${p.id}" ${!h && !e ? 'draggable="true" tabindex="0" role="button"' : ''}>
+      <div class="k-cim">${esc(tisztaCim(p))}</div>
+      <div class="k-eloado">${esc(p.performer)}</div>
+      ${leiras ? `<div class="k-leiras">${esc(leiras)}</div>` : ''}
+      <div class="k-sor"><span class="cimke">#${p.id}</span>
+        ${pr ? `<span class="cimke dupla">Dupla · ${pr.slot_id}. sávval</span>` : ''}
+        ${p.requirements && /évfolyam/.test(p.requirements) ? `<span class="cimke">${esc(p.requirements.replace(/[()]/g, '').replace(' ajánlott', ''))}</span>` : ''}
+        <span class="cimke">${p.capacity} fő</span>
+        ${h ? `<span class="hely">Itt: ${esc(h.terem.nev || 'névtelen terem')}</span> <button data-kivesz="${p.id}">Kivesz</button>` : ''}
+        ${e ? '<span>Elmarad</span>' : ''}</div></div>`;
+  }).join('') : '<div class="ures-lista">Nincs a szűrésnek megfelelő előadás.</div>';
+}
+
+function rajzolTermek() {
+  $('termek').innerHTML = A.termek.map((t) => {
+    const db = Object.keys(t.savok).length;
+    return `<button data-terem="${t.id}" aria-current="${t.id === A.aktiv}">${esc(t.nev || 'Névtelen terem')}<span class="db">${db}/${SAVOK.length}</span></button>`;
+  }).join('');
+}
+
+function rajzolElonezet() {
+  const keret = document.createElement('div');
+  keret.className = 'lapkeret';
+  const lap = lapElem(aktivTerem(), { interaktiv: true });
+  keret.append(lap);
+  $('elonezet').replaceChildren(keret);
+  illeszt(lap);
+  meretez();
+}
+function meretez() {
+  const keret = document.querySelector('.lapkeret');
+  if (!keret) return;
+  const lap = keret.firstChild;
+  const w = lap.offsetWidth, h = lap.offsetHeight;
+  const hely = $('elonezet').clientWidth - 40;
+  const s = Math.min(1, hely / w);
+  lap.style.transform = `scale(${s})`;
+  keret.style.width = w * s + 'px';
+  keret.style.height = h * s + 'px';
+}
+
+function rajzolIdok() {
+  const cont = $('idok');
+  cont.querySelectorAll('input').forEach((i) => i.remove());
+  for (const s of SAVOK) {
+    const i = document.createElement('input');
+    Object.assign(i, { type: 'text', id: 'ido' + s.id, className: 'ido-mezo', placeholder: `${s.id}. sáv: 9:00–9:45`, value: A.idok[s.id] || '' });
+    i.setAttribute('aria-label', `${s.title} időpontja`);
+    i.addEventListener('input', () => { A.idok[s.id] = i.value.trim(); ment(); rajzolElonezet(); });
+    cont.append(i);
+  }
+}
+
+function rajzol() { rajzolFulek(); rajzolLista(); rajzolTermek(); rajzolElonezet(); }
+
+let uzenetIdo;
+function uzen(szoveg) {
+  const u = $('uzenet'); u.textContent = szoveg; u.classList.add('latszik');
+  clearTimeout(uzenetIdo); uzenetIdo = setTimeout(() => u.classList.remove('latszik'), 3200);
+}
+
+// ---- Nyomtatás ----
+function nyomtatasEpit(mit) {
+  const gyoker = $('nyomtatas');
+  gyoker.replaceChildren();
+  if (mit === 'kartyak') {
+    for (const s of SAVOK) {
+      const kartyak = ELOADASOK.filter((p) => p.slot_id === s.id && !elmarad(p)).sort((a, b) => a.id - b.id);
+      for (let i = 0; i < kartyak.length; i += 3) {
+        const ideig = { nev: `Kártyák · ${s.title}`, savok: {} };
+        const lap = document.createElement('div');
+        lap.className = 'lap kartyalap';
+        const harom = kartyak.slice(i, i + 3);
+        lap.innerHTML = `<header><div class="terem">Előadói kártyák · ${esc(s.title)}</div><div class="esemeny">${i / 3 + 1}. lap / ${Math.ceil(kartyak.length / 3)}</div></header>
+          <main>${[0, 1, 2].map((k) => harom[k] ? oszlopHTML(s, harom[k], { azon: true, idoNelkul: !A.idok[s.id] }) : '<section></section>').join('')}</main>`;
+        gyoker.append(lap);
+      }
+    }
+  } else {
+    const termek = mit === 'mind' ? A.termek.filter((t) => Object.keys(t.savok).length) : [aktivTerem()];
+    for (const t of termek) gyoker.append(lapElem(t));
+  }
+  gyoker.querySelectorAll('.lap').forEach(illeszt);
+  return gyoker.children.length;
+}
+window.nyomtatasEpit = nyomtatasEpit;
+function nyomtat(mit) {
+  if (mit === 'mind') {
+    const nevtelen = A.termek.filter((t) => Object.keys(t.savok).length && !t.nev.trim()).length;
+    if (nevtelen) uzen(`${nevtelen} teremnek még nincs neve – a lapon vonal lesz a helyén.`);
+  }
+  if (!nyomtatasEpit(mit)) return uzen('Nincs mit nyomtatni: még egyik teremben sincs előadás.');
+  window.print();
+}
+
+// ---- Események ----
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('button');
+  const k = e.target.closest('.kartya');
+  if (b?.dataset.sav && b.closest('#savfulek')) { A.sav = +b.dataset.sav; ment(); rajzolFulek(); rajzolLista(); return; }
+  if (b?.dataset.kivesz) { kivesz(+b.dataset.kivesz); ment(); rajzol(); uzen('Kivéve, visszakerült a listába.'); return; }
+  if (b?.dataset.terem) { A.aktiv = b.dataset.terem; ment(); rajzolTermek(); rajzolElonezet(); return; }
+  if (b?.dataset.szerk) return szerkeszt(+b.dataset.szerk);
+  if (k && !b && !k.classList.contains('hasznalt') && !k.classList.contains('elmarad')) behelyez(+k.dataset.pid, aktivTerem());
+  const oszlop = e.target.closest('.lapkeret .oszlop.ures');
+  if (oszlop && !b) { A.sav = +oszlop.dataset.sav; ment(); rajzolFulek(); rajzolLista(); }
+});
+document.addEventListener('keydown', (e) => {
+  const k = e.target.closest?.('.kartya[tabindex]');
+  if (k && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); behelyez(+k.dataset.pid, aktivTerem()); }
+});
+// A lista frissítése késleltetve, hogy egy kártyára kattintás közben ne rajzolódjon újra.
+let nevIdo;
+document.addEventListener('input', (e) => {
+  if (e.target.id !== 'teremNev') return;
+  aktivTerem().nev = e.target.value; ment(); rajzolTermek();
+  clearTimeout(nevIdo); nevIdo = setTimeout(rajzolLista, 500);
+});
+document.addEventListener('dragstart', (e) => {
+  const k = e.target.closest?.('.kartya[draggable]');
+  if (!k) return;
+  huzott = byId.get(+k.dataset.pid);
+  e.dataTransfer.setData('text/plain', String(huzott.id));
+  e.dataTransfer.effectAllowed = 'move';
+});
+document.addEventListener('dragend', () => { huzott = null; document.querySelectorAll('.oszlop.cel,.oszlop.tiltott').forEach((o) => o.classList.remove('cel', 'tiltott')); });
+document.addEventListener('dragover', (e) => {
+  const o = e.target.closest('.lapkeret .oszlop');
+  document.querySelectorAll('.oszlop.cel,.oszlop.tiltott').forEach((x) => x !== o && x.classList.remove('cel', 'tiltott'));
+  if (!o || !huzott) return;
+  const jo = +o.dataset.sav === huzott.slot_id;
+  o.classList.toggle('cel', jo); o.classList.toggle('tiltott', !jo);
+  if (jo) e.preventDefault();
+});
+document.addEventListener('drop', (e) => {
+  const o = e.target.closest('.lapkeret .oszlop');
+  if (!o || !huzott) return;
+  e.preventDefault();
+  if (+o.dataset.sav !== huzott.slot_id) return uzen(`Ez a kártya csak a ${huzott.slot_id}. sávba kerülhet.`);
+  behelyez(huzott.id, aktivTerem());
+});
+
+function szerkeszt(pid) {
+  const p = byId.get(pid);
+  const oszlop = document.querySelector(`.lapkeret .leiras[data-pid="${pid}"]`)?.closest('.oszlop');
+  if (!oszlop) return;
+  const tart = oszlop.querySelector('.tartalom');
+  const eredeti = tisztaLeiras(p.description);
+  tart.innerHTML = `<div class="felirat">Leírás az ajtólapon (#${pid})</div>
+    <textarea class="szerk" id="szerk${pid}" aria-label="Leírás szerkesztése"></textarea>
+    <div class="szerk-gombok"><button data-akcio="ment">Mentés</button><button data-akcio="eredeti">Eredeti szöveg</button><button data-akcio="megse">Mégse</button></div>`;
+  tart.style.display = 'flex'; tart.style.flexDirection = 'column';
+  const ta = tart.querySelector('textarea');
+  ta.style.flex = '1'; ta.value = A.szovegek[pid] ?? eredeti; ta.focus();
+  tart.querySelector('.szerk-gombok').addEventListener('click', (e) => {
+    const a = e.target.dataset.akcio;
+    if (a === 'ment') { const v = ta.value.trim(); if (v && v !== eredeti) A.szovegek[pid] = v; else delete A.szovegek[pid]; ment(); uzen('Leírás mentve.'); }
+    if (a === 'eredeti') { delete A.szovegek[pid]; ment(); uzen('Visszaállítva az oldalon lévő szövegre.'); }
+    if (a) rajzolElonezet();
+  });
+}
+
+$('kereses').addEventListener('input', rajzolLista);
+$('csakSzabad').addEventListener('change', rajzolLista);
+$('elmaradtak').addEventListener('change', rajzolLista);
+$('ujTerem').addEventListener('click', () => {
+  const t = { id: ujId(), nev: '', savok: {} };
+  A.termek.push(t); A.aktiv = t.id; ment(); rajzol();
+  $('teremNev')?.focus();
+});
+let torlesKer = 0;
+$('teremTorles').addEventListener('click', (e) => {
+  const t = aktivTerem();
+  if (Date.now() - torlesKer > 3000) { torlesKer = Date.now(); e.target.textContent = 'Biztosan törlöd? Kattints újra'; setTimeout(() => (e.target.textContent = 'Terem törlése'), 3000); return; }
+  torlesKer = 0; e.target.textContent = 'Terem törlése';
+  A.termek = A.termek.filter((x) => x !== t);
+  if (!A.termek.length) A.termek.push({ id: ujId(), nev: '', savok: {} });
+  A.aktiv = A.termek[0].id; ment(); rajzol();
+  uzen(`Törölve: ${t.nev || 'névtelen terem'}. Az előadásai visszakerültek a listába.`);
+});
+$('nyomtatEz').addEventListener('click', () => nyomtat('ez'));
+$('nyomtatMind').addEventListener('click', () => nyomtat('mind'));
+$('nyomtatKartyak').addEventListener('click', () => nyomtat('kartyak'));
+$('mentes').addEventListener('click', () => {
+  const blob = new Blob([JSON.stringify(A, null, 1)], { type: 'application/json' });
+  const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: 'e5n-beosztas.json' });
+  a.click(); URL.revokeObjectURL(a.href);
+});
+$('betoltesGomb').addEventListener('click', () => $('betoltes').click());
+$('betoltes').addEventListener('change', async (e) => {
+  try {
+    const uj = JSON.parse(await e.target.files[0].text());
+    if (!Array.isArray(uj.termek)) throw new Error();
+    A = { ...alapAllapot(), ...uj }; ment(); rajzolIdok(); rajzol(); uzen('Beosztás betöltve.');
+  } catch { uzen('Ez a fájl nem egy mentett beosztás. A „Beosztás mentése fájlba” gombbal készült fájlt válaszd.'); }
+  e.target.value = '';
+});
+window.addEventListener('resize', meretez);
+window.addEventListener('afterprint', () => $('nyomtatas').replaceChildren());
+
+rajzolIdok();
+rajzol();
+</script>
+</body>
+</html>
