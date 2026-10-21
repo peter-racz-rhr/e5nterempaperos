@@ -1,1 +1,17 @@
-[{"id":1,"title":"1. SÁV","details":null},{"id":2,"title":"2. SÁV","details":null},{"id":3,"title":"3. SÁV","details":null}]
+[
+ {
+  "id": 1,
+  "title": "1. SÁV (8:30 - 9:30)",
+  "details": null
+ },
+ {
+  "id": 2,
+  "title": "2. SÁV (9:45 - 10:45)",
+  "details": null
+ },
+ {
+  "id": 3,
+  "title": "3. SÁV (11:00 - 12:00)",
+  "details": null
+ }
+]
